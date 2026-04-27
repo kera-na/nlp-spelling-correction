@@ -1,0 +1,78 @@
+import pickle
+import string
+
+import nltk
+import pandas as pd
+from nltk.tokenize import word_tokenize
+
+
+INPUT_CSV = "data/metadata.csv"
+OUTPUT_PICKLE = "processed_corpus.pkl"
+OUTPUT_VOCAB = "vocabulary.txt"
+RAW_OUTPUT_TXT = "raw_corpus_words.txt"  # FIX 2
+MAX_WORDS = 110_000
+
+
+def ensure_nltk_resources() -> None:
+    """Download required NLTK tokenizer models if missing."""
+    try:
+        nltk.data.find("tokenizers/punkt")
+    except LookupError:
+        nltk.download("punkt", quiet=True)
+    # Newer NLTK versions may require punkt_tab as well.
+    try:
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        nltk.download("punkt_tab", quiet=True)
+
+
+def clean_and_tokenize(text: str) -> list[str]:
+    """Lowercase text, remove punctuation, and tokenize."""
+    lowered = text.lower()
+    translator = str.maketrans("", "", string.punctuation)
+    cleaned = lowered.translate(translator)
+    return word_tokenize(cleaned)
+
+
+def main() -> None:
+    ensure_nltk_resources()
+
+    df = pd.read_csv(INPUT_CSV)
+
+    raw_corpus_tokens: list[str] = []  # FIX 2
+    processed_corpus: list[str] = []
+
+    for abstract in df["abstract"]:
+        if pd.isna(abstract):
+            continue
+
+        raw_tokens = word_tokenize(str(abstract))  # FIX 2
+        raw_corpus_tokens.extend(raw_tokens)  # FIX 2
+        tokens = clean_and_tokenize(str(abstract))
+        for token in tokens:
+            if len(processed_corpus) >= MAX_WORDS:
+                break
+            processed_corpus.append(token)
+
+        if len(processed_corpus) >= MAX_WORDS:
+            break
+
+    with open(RAW_OUTPUT_TXT, "w", encoding="utf-8") as f:  # FIX 2
+        for token in raw_corpus_tokens:  # FIX 2
+            f.write(f"{token}\n")  # FIX 2
+
+    with open(OUTPUT_PICKLE, "wb") as f:
+        pickle.dump(processed_corpus, f)
+
+    unique_words = sorted(set(processed_corpus))
+    with open(OUTPUT_VOCAB, "w", encoding="utf-8") as f:
+        for word in unique_words:
+            f.write(f"{word}\n")
+
+    print(f"Saved {len(raw_corpus_tokens)} raw tokens to {RAW_OUTPUT_TXT}")  # FIX 2
+    print(f"Saved {len(processed_corpus)} tokens to {OUTPUT_PICKLE}")
+    print(f"Saved {len(unique_words)} unique words to {OUTPUT_VOCAB}")
+
+
+if __name__ == "__main__":
+    main()
