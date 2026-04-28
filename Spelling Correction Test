@@ -1,0 +1,109 @@
+def run_spell_checker() -> None:
+    print("\nSpell Checker — Spelling + Bigram + Semantic")
+    print("Type 'exit' to quit\n")
+
+    while True:
+        print("─" * 50)
+        text = input("Enter text (up to 500 words): ").strip()
+
+        if text.lower() in ("exit", "quit", "q"):
+            print("Goodbye!")
+            break
+
+        if not text:
+            print("  No input detected, try again.\n")
+            continue
+
+        words = text.split()
+        if len(words) > 500:
+            print(f"  Too long ({len(words)} words). Please enter up to 500 words.\n")
+            continue
+
+        print(f"\n  ({len(words)} words received)\n")
+
+        import re
+        sentences     = re.split(r'(?<=[.!?])\s+', text.strip())
+        all_corrected = []
+
+        for s_idx, sentence in enumerate(sentences, 1):
+            if len(sentences) > 1:
+                print(f"\n── Sentence {s_idx} ──")
+
+            prev      = "<s>"
+            corrected = []
+
+            for word in sentence.split():
+                clean = word.strip(string.punctuation).lower()
+                if not clean:
+                    corrected.append(word)
+                    continue
+
+                needs_correction = (
+                    not dm.is_word_valid(clean) or is_real_word_error(clean, prev)
+                )
+
+                if needs_correction:
+                    error_type  = "Real-word" if dm.is_word_valid(clean) else "Non-word"
+                    suggestions = correct_word(clean, prev)
+
+                    if not suggestions:
+                        print(f"  '{clean}' → no suggestions, keeping original")
+                        corrected.append(word)
+                        prev = clean
+                        continue
+
+                    print(f"\n  {error_type} error: '{clean}'")
+                    print(f"  Suggestions:")
+                    for i, (w, score, dist) in enumerate(suggestions, 1):
+                        print(f"    {i}. {w}  (edit distance: {dist},  score: {score:.6e})")
+                    print(f"    0. Keep original '{clean}'")
+
+                    choice = input("  Select [1-5] or 0 to keep: ").strip()
+
+                    if choice == "0":
+                        selected = clean
+                    elif choice.isdigit() and 1 <= int(choice) <= len(suggestions):
+                        selected = suggestions[int(choice) - 1][0]
+                    else:
+                        selected = suggestions[0][0]
+                        print(f"  Invalid input — defaulting to: '{selected}'")
+
+                    print(f"  → '{selected}'")
+                    corrected.append(selected)
+                    prev = selected
+
+                else:
+                    print(f"  '{clean}' ✅")
+                    corrected.append(clean)
+                    prev = clean
+
+            all_corrected.append(" ".join(corrected))
+
+        print(f"\n{'='*50}")
+        print("SUMMARY")
+        print(f"{'='*50}")
+        
+        print(f"Original:\n  {text}\n")
+        print(f"Corrected:\n  {' '.join(all_corrected)}")
+        print(f"{'='*50}\n")
+      
+
+def main() -> None:
+    print("System loaded ✔\n")
+
+    # Perplexity evaluation
+    held_out = corpus[-5000:]
+    pp = evaluate_perplexity(held_out, bigram_lm, n=2)
+    print(f"Bigram perplexity on held-out data: {pp:.2f}")
+    print("(Lower = better language model)\n")
+
+    # Sorted word list with prefix search — fulfils assignment requirement
+    print("Sample sorted corpus words (prefix 'bio'):")
+    print(dm.get_matches("bio", mode="prefix", limit=10))
+    print()
+
+    run_spell_checker()
+
+
+if __name__ == "__main__":
+    main()
