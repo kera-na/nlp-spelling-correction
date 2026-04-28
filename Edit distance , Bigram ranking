@@ -1,0 +1,100 @@
+# LOAD CORPUS
+
+dm         = DictionaryManager("vocabulary.txt")
+dictionary = dm.word_set
+
+with open("processed_corpus.pkl", "rb") as f:
+    corpus = pickle.load(f)
+
+word_freq   = Counter(corpus)
+total_words = sum(word_freq.values())
+
+# UNIGRAM PROBABILITY
+def P_word(word: str) -> float:
+    return word_freq[word.lower()] / total_words if word.lower() in word_freq else 1e-9
+
+# EDIT DISTANCE
+#    Standard cost=1 used everywhere 
+def levenshtein(a: str, b: str) -> int:
+    """Standard edit distance — cost=1 for all operations."""
+    if len(a) < len(b):
+        a, b = b, a
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        curr = [i]
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            curr.append(min(prev[j] + 1, curr[-1] + 1, prev[j - 1] + cost))
+        prev = curr
+    return prev[-1]
+
+
+# BIGRAM LANGUAGE MODEL
+def build_bigram_model(corpus: list) -> Laplace:
+    train_data, vocab = padded_everygram_pipeline(2, [corpus])
+    model = Laplace(2)
+    model.fit(train_data, vocab)
+    return model
+
+bigram_lm = build_bigram_model(corpus)
+
+def bigram_score(prev_word: str, candidate: str) -> float:
+    return bigram_lm.score(candidate, [prev_word])
+
+def spelling_score(misspelled: str, candidate: str, prev_word: str) -> float:
+    """
+    Ranks candidates using Bigram probability and Levenshtein distance.
+    """
+    # 1. Error Model: P(Error | Candidate) using Edit Distance
+    dist = levenshtein(misspelled, candidate)
+    # Penalize based on distance (Exponential decay)
+    error_prob = math.exp(-2 * dist)
+    
+    # 2. Language Model: P(Candidate | Previous Word)
+    # Using the Laplace-smoothed Bigram model built in cell 3
+    lang_prob = bigram_lm.score(candidate, [prev_word])
+    
+    # 3. Back-off Logic: 
+    # If the Bigram is unseen (prob=0), we back off to a small epsilon 
+    # so the Edit Distance can still suggest the word.
+    if lang_prob <= 0:
+        lang_prob = 1e-9
+        
+    return lang_prob * error_prob
+def combined_score(misspelled, candidate, prev_word):
+    dist = levenshtein(misspelled, candidate)
+    error_prob = math.exp(-2 * dist)
+
+    lang_prob = bigram_lm.score(candidate, [prev_word])
+
+    return error_prob * lang_prob
+# --- CORRECTION ENGINE ---
+
+def correct_word(misspelled, prev_word, top_k=5):
+    results = []
+
+    for w in dictionary:
+        dist = levenshtein(misspelled, w) # Calculate dist here
+        if dist <= 2:
+            score = combined_score(misspelled, w, prev_word)
+            results.append((w, score, dist)) # Include dist in the tuple
+
+    return sorted(results, key=lambda x: x[1], reverse=True)[:top_k]
+
+# --- REAL-WORD ERROR DETECTION ---
+
+REAL_WORD_THRESHOLD = 1e-6
+
+def is_real_word_error(word: str, prev_word: str) -> bool:
+    """
+    Flags correctly spelled words that are statistically unlikely in context.
+    """
+    # If the probability of this word following the previous one is too low, flag it.
+    return bigram_lm.score(word.lower(), [prev_word.lower()]) < REAL_WORD_THRESHOLD
+# PERPLEXITY EVALUATION
+
+
+def evaluate_perplexity(test_tokens: list, model: Laplace, n: int = 2) -> float:
+    test_data, _ = padded_everygram_pipeline(n, [test_tokens])
+    scores = [model.perplexity(seq) for seq in test_data]
+    return scores[-1] if scores else float("inf")
