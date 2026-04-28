@@ -1,0 +1,33 @@
+
+from collections import Counter
+from nltk.lm import Laplace
+from nltk.lm.preprocessing import padded_everygram_pipeline
+from nltk.lm.models import KneserNeyInterpolated
+from gensim.models import Word2Vec
+from sklearn.metrics.pairwise import cosine_similarity
+
+# DICTIONARY MANAGER
+
+
+class DictionaryManager:
+    def __init__(self, vocab_path: str = "vocabulary.txt") -> None:
+        with open(vocab_path, "r", encoding="utf-8") as f:
+            self.words = sorted(w.strip() for w in f if w.strip())
+        self.word_set = set(self.words)
+
+    def is_word_valid(self, word: str) -> bool:
+        return word.lower() in self.word_set
+
+    def get_matches(self, query: str, mode: str = "prefix", limit: int = 50) -> list:
+        if not query:
+            return self.words[:limit]
+        if mode == "substring":
+            return [w for w in self.words if query in w][:limit]
+        if mode != "prefix":
+            raise ValueError("mode must be 'prefix' or 'substring'")
+        start = bisect.bisect_left(self.words, query)
+        end   = bisect.bisect_right(self.words, query + "\uffff")
+        return self.words[start:end][:limit]
+
+    def search_substring(self, query: str, limit: int = 50) -> list:
+        return self.get_matches(query, mode="substring", limit=limit)
